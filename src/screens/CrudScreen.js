@@ -215,36 +215,32 @@ export default function CrudScreen({ navigation }) {
       <StatusBar style="auto" />
       
       <View style={styles.header}>
-        <View style={styles.headerContent}>
+        <View style={styles.headerTop}>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>CRUD de Itens</Text>
-            <Text style={styles.headerSubtitle}>
-              Banco: {databaseChoice === 'mongodb' ? 'MongoDB Atlas' : 'SQLite Local'}
-            </Text>
-          </View>
-          <View style={styles.headerButtons}>
-            <TouchableOpacity
-              style={[styles.headerActionButton, styles.enderecoButton]}
-              onPress={() => navigation.navigate('Endereco')}
-            >
-              <Text style={styles.headerActionButtonText}>Endereços</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.headerActionButton, styles.syncButton]}
-              onPress={handleSync}
-              disabled={syncing}
-            >
-              <Text style={styles.headerActionButtonText}>
-                {syncing ? 'Sincronizando...' : 'Sincronizar'}
+            <View style={styles.databaseBadge}>
+              <Text style={styles.databaseBadgeText}>
+                {databaseChoice === 'mongodb' ? '☁️ MongoDB Atlas' : '📱 SQLite Local'}
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.headerActionButton, styles.logoutButton]}
-              onPress={handleLogout}
-            >
-              <Text style={styles.headerActionButtonText}>Trocar BD</Text>
-            </TouchableOpacity>
+            </View>
           </View>
+        </View>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.headerActionButton}
+            onPress={() => navigation.navigate('Endereco')}
+          >
+            <Text style={styles.headerActionButtonText}>Endereços</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerActionButton}
+            onPress={handleSync}
+            disabled={syncing}
+          >
+            <Text style={styles.headerActionButtonText}>
+              {syncing ? 'Sincronizando...' : 'Sincronizar'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -331,55 +327,61 @@ const styles = StyleSheet.create({
     backgroundColor: '#6200ee',
     padding: 20,
     paddingTop: 50,
+    paddingBottom: 20,
   },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  headerTop: {
+    marginBottom: 15,
   },
   headerTextContainer: {
-    flex: 1,
+    marginBottom: 10,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 5,
+    marginBottom: 8,
+    letterSpacing: 0.5,
   },
-  headerSubtitle: {
-    fontSize: 14,
+  databaseBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  databaseBadgeText: {
+    fontSize: 13,
     color: '#fff',
-    opacity: 0.9,
+    fontWeight: '600',
   },
   headerButtons: {
     flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
+    gap: 12,
+    flexWrap: 'wrap',
   },
   headerActionButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  enderecoButton: {
-    backgroundColor: 'rgba(255, 152, 0, 0.3)',
-    borderColor: 'rgba(255, 152, 0, 0.5)',
-  },
-  syncButton: {
-    backgroundColor: 'rgba(76, 175, 80, 0.3)',
-    borderColor: 'rgba(76, 175, 80, 0.5)',
-  },
-  logoutButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    flex: 1,
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+    minHeight: 50,
   },
   headerActionButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 12,
+    color: '#6200ee',
+    fontWeight: '700',
+    fontSize: 15,
+    textAlign: 'center',
+    letterSpacing: 0.3,
   },
   list: {
     padding: 15,
