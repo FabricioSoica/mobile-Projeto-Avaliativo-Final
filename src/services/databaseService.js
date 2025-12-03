@@ -32,12 +32,39 @@ export const initSQLiteDatabase = () => {
           bairro TEXT NOT NULL,
           numero TEXT NOT NULL,
           estado TEXT,
+          favorito INTEGER DEFAULT 0,
           dataCriacao TEXT
         );`,
         [],
         () => {
           console.log('Tabela enderecos SQLite criada com sucesso');
-          resolve();
+          tx.executeSql(
+            `PRAGMA table_info(enderecos);`,
+            [],
+            (_, result) => {
+              const columns = result.rows._array.map(col => col.name);
+              if (!columns.includes('favorito')) {
+                tx.executeSql(
+                  `ALTER TABLE enderecos ADD COLUMN favorito INTEGER DEFAULT 0;`,
+                  [],
+                  () => {
+                    console.log('Coluna favorito adicionada à tabela enderecos');
+                    resolve();
+                  },
+                  (_, error) => {
+                    console.error('Erro ao adicionar coluna favorito:', error);
+                    resolve();
+                  }
+                );
+              } else {
+                resolve();
+              }
+            },
+            (_, error) => {
+              console.error('Erro ao verificar colunas da tabela enderecos:', error);
+              resolve();
+            }
+          );
         },
         (_, error) => {
           console.error('Erro ao criar tabela enderecos SQLite:', error);
@@ -314,7 +341,8 @@ export const syncDatabases = async () => {
             rua: sqliteEndereco.rua,
             bairro: sqliteEndereco.bairro,
             numero: sqliteEndereco.numero,
-            estado: sqliteEndereco.estado || ''
+            estado: sqliteEndereco.estado || '',
+            favorito: sqliteEndereco.favorito || 0
           });
           addedEnderecosToMongo++;
         } catch (error) {
@@ -332,7 +360,8 @@ export const syncDatabases = async () => {
             rua: mongoEndereco.rua,
             bairro: mongoEndereco.bairro,
             numero: mongoEndereco.numero,
-            estado: mongoEndereco.estado || ''
+            estado: mongoEndereco.estado || '',
+            favorito: mongoEndereco.favorito || 0
           });
           addedEnderecosToSQLite++;
         } catch (error) {
@@ -341,13 +370,60 @@ export const syncDatabases = async () => {
       }
     }
 
+    let updatedFavoritos = 0;
+    for (const sqliteEndereco of sqliteEnderecos) {
+      const key = `${sqliteEndereco.cep}_${sqliteEndereco.rua}_${sqliteEndereco.numero}`.toLowerCase();
+      const mongoEndereco = mongoEnderecoMap.get(key);
+      if (mongoEndereco) {
+        const sqliteFavorito = sqliteEndereco.favorito || 0;
+        const mongoFavorito = mongoEndereco.favorito || 0;
+        if (sqliteFavorito !== mongoFavorito) {
+          try {
+            if (sqliteFavorito === 1) {
+              await mongoFavoriteEndereco(mongoEndereco._id, 1);
+              updatedFavoritos++;
+            } else if (mongoFavorito === 1) {
+              await sqliteFavoriteEndereco(sqliteEndereco._id, 1);
+              updatedFavoritos++;
+            }
+          } catch (error) {
+            console.error('Erro ao sincronizar favorito:', error);
+          }
+        }
+      }
+    }
+
+    const messageParts = ['Sincronização concluída!\n'];
+    
+    if (addedToMongo > 0 || addedEnderecosToMongo > 0) {
+      messageParts.push(`\n📤 Adicionado ao MongoDB:`);
+      if (addedToMongo > 0) messageParts.push(`  • ${addedToMongo} item(s)`);
+      if (addedEnderecosToMongo > 0) messageParts.push(`  • ${addedEnderecosToMongo} endereço(s)`);
+    }
+    
+    if (addedToSQLite > 0 || addedEnderecosToSQLite > 0) {
+      messageParts.push(`\n📥 Adicionado ao SQLite:`);
+      if (addedToSQLite > 0) messageParts.push(`  • ${addedToSQLite} item(s)`);
+      if (addedEnderecosToSQLite > 0) messageParts.push(`  • ${addedEnderecosToSQLite} endereço(s)`);
+    }
+    
+    if (updatedFavoritos > 0) {
+      messageParts.push(`\n⭐ Favoritos sincronizados:`);
+      messageParts.push(`  • ${updatedFavoritos} favorito(s)`);
+    }
+    
+    if (addedToMongo === 0 && addedToSQLite === 0 && addedEnderecosToMongo === 0 && addedEnderecosToSQLite === 0 && updatedFavoritos === 0) {
+      messageParts.push(`\n✓ Nenhuma alteração necessária.`);
+    }
+
     return {
       success: true,
       addedToMongo,
       addedToSQLite,
       addedEnderecosToMongo,
       addedEnderecosToSQLite,
-      message: `Sincronização concluída! ${addedToMongo} item(s) e ${addedEnderecosToMongo} endereço(s) adicionado(s) ao MongoDB. ${addedToSQLite} item(s) e ${addedEnderecosToSQLite} endereço(s) adicionado(s) ao SQLite.`
+      updatedFavoritos,
+      message: messageParts.join('\n')
     };
   } catch (error) {
     return {
@@ -393,12 +469,21 @@ const mongoDeleteEndereco = async (id) => {
   }
 };
 
+const mongoFavoriteEndereco = async (id, favorito) => {
+  try {
+    const response = await axios.put(`${API_URL}/enderecos/${id}/favorite`, { favorito });
+    return response.data;
+  } catch (error) {
+    throw new Error('Erro ao favoritar endereço no MongoDB: ' + error.message);
+  }
+};
+
 const sqliteCreateEndereco = (endereco) => {
   return new Promise((resolve, reject) => {
     db.transaction((tx) => {
       tx.executeSql(
-        'INSERT INTO enderecos (cep, rua, bairro, numero, estado, dataCriacao) VALUES (?, ?, ?, ?, ?, ?);',
-        [endereco.cep, endereco.rua, endereco.bairro, endereco.numero, endereco.estado || '', new Date().toISOString()],
+        'INSERT INTO enderecos (cep, rua, bairro, numero, estado, favorito, dataCriacao) VALUES (?, ?, ?, ?, ?, ?, ?);',
+        [endereco.cep, endereco.rua, endereco.bairro, endereco.numero, endereco.estado || '', endereco.favorito || 0, new Date().toISOString()],
         (_, result) => {
           resolve({ ...endereco, id: result.insertId.toString() });
         },
@@ -426,6 +511,7 @@ const sqliteReadEnderecos = () => {
               bairro: rows.item(i).bairro,
               numero: rows.item(i).numero,
               estado: rows.item(i).estado,
+              favorito: rows.item(i).favorito || 0,
               dataCriacao: rows.item(i).dataCriacao
             });
           }
@@ -443,8 +529,8 @@ const sqliteUpdateEndereco = (id, endereco) => {
   return new Promise((resolve, reject) => {
     db.transaction((tx) => {
       tx.executeSql(
-        'UPDATE enderecos SET cep = ?, rua = ?, bairro = ?, numero = ?, estado = ? WHERE id = ?;',
-        [endereco.cep, endereco.rua, endereco.bairro, endereco.numero, endereco.estado || '', id],
+        'UPDATE enderecos SET cep = ?, rua = ?, bairro = ?, numero = ?, estado = ?, favorito = ? WHERE id = ?;',
+        [endereco.cep, endereco.rua, endereco.bairro, endereco.numero, endereco.estado || '', endereco.favorito !== undefined ? endereco.favorito : 0, id],
         (_, result) => {
           resolve({ ...endereco, _id: id });
         },
@@ -464,6 +550,23 @@ const sqliteDeleteEndereco = (id) => {
         [id],
         (_, result) => {
           resolve({ message: 'Endereço deletado com sucesso' });
+        },
+        (_, error) => {
+          reject(error);
+        }
+      );
+    });
+  });
+};
+
+const sqliteFavoriteEndereco = (id, favorito) => {
+  return new Promise((resolve, reject) => {
+    db.transaction((tx) => {
+      tx.executeSql(
+        'UPDATE enderecos SET favorito = ? WHERE id = ?;',
+        [favorito, id],
+        (_, result) => {
+          resolve({ _id: id, favorito });
         },
         (_, error) => {
           reject(error);
@@ -506,6 +609,15 @@ export const deleteEndereco = async (id) => {
     return await mongoDeleteEndereco(id);
   } else {
     return await sqliteDeleteEndereco(id);
+  }
+};
+
+export const favoriteEndereco = async (id, favorito) => {
+  const choice = await getDatabaseChoice();
+  if (choice === 'mongodb') {
+    return await mongoFavoriteEndereco(id, favorito);
+  } else {
+    return await sqliteFavoriteEndereco(id, favorito);
   }
 };
 

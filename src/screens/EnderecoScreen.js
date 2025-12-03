@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, TouchableWithoutFeedback, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, TouchableWithoutFeedback, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { TextInput, Button, Card, Title, Paragraph, FAB } from 'react-native-paper';
+import { TextInput, Button, Card, Title, Paragraph, FAB, IconButton } from 'react-native-paper';
 import axios from 'axios';
 import {
   createEndereco,
   readEnderecos,
   updateEndereco,
   deleteEndereco,
+  favoriteEndereco,
 } from '../services/databaseService';
 
 export default function EnderecoScreen({ navigation }) {
@@ -30,7 +31,8 @@ export default function EnderecoScreen({ navigation }) {
     setLoading(true);
     try {
       const data = await readEnderecos();
-      setEnderecos(data);
+      const sorted = data.sort((a, b) => (b.favorito || 0) - (a.favorito || 0));
+      setEnderecos(sorted);
     } catch (error) {
       Alert.alert('Erro', 'Não foi possível carregar os endereços: ' + error.message);
     } finally {
@@ -110,11 +112,12 @@ export default function EnderecoScreen({ navigation }) {
     }
 
     try {
+      const favorito = editingEndereco ? (editingEndereco.favorito || 0) : 0;
       if (editingEndereco) {
-        await updateEndereco(editingEndereco._id, { cep, rua, bairro, numero, estado });
+        await updateEndereco(editingEndereco._id, { cep, rua, bairro, numero, estado, favorito });
         Alert.alert('Sucesso', 'Endereço atualizado com sucesso!');
       } else {
-        await createEndereco({ cep, rua, bairro, numero, estado });
+        await createEndereco({ cep, rua, bairro, numero, estado, favorito: 0 });
         Alert.alert('Sucesso', 'Endereço criado com sucesso!');
       }
       resetForm();
@@ -133,6 +136,16 @@ export default function EnderecoScreen({ navigation }) {
     setNumero(endereco.numero);
     setEstado(endereco.estado || '');
     setModalVisible(true);
+  };
+
+  const handleToggleFavorito = async (endereco) => {
+    try {
+      const novoFavorito = endereco.favorito === 1 ? 0 : 1;
+      await favoriteEndereco(endereco._id, novoFavorito);
+      loadEnderecos();
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível atualizar favorito: ' + error.message);
+    }
   };
 
   const handleDelete = (endereco) => {
@@ -195,16 +208,24 @@ export default function EnderecoScreen({ navigation }) {
             </Card>
           ) : (
             enderecos.map((endereco) => (
-              <Card key={endereco._id} style={styles.card} onPress={() => handleEdit(endereco)}>
+              <Card key={endereco._id} style={styles.card}>
                 <Card.Content>
-                  <Title>{endereco.rua}, {endereco.numero}</Title>
+                  <View style={styles.cardHeader}>
+                    <Title style={styles.cardTitle}>{endereco.rua}, {endereco.numero}</Title>
+                    <IconButton
+                      icon={endereco.favorito === 1 ? 'star' : 'star-outline'}
+                      iconColor={endereco.favorito === 1 ? '#FFD700' : '#000'}
+                      size={24}
+                      onPress={() => handleToggleFavorito(endereco)}
+                    />
+                  </View>
                   <Paragraph>CEP: {endereco.cep}</Paragraph>
                   <Paragraph>Bairro: {endereco.bairro}</Paragraph>
                   {endereco.estado && <Paragraph>Estado: {endereco.estado}</Paragraph>}
                 </Card.Content>
                 <Card.Actions>
                   <Button onPress={() => handleEdit(endereco)}>Editar</Button>
-                  <Button onPress={() => handleDelete(endereco)} textColor="white">Excluir</Button>
+                  <Button onPress={() => handleDelete(endereco)} textColor="#ffffff">Excluir</Button>
                 </Card.Actions>
               </Card>
             ))
@@ -330,6 +351,15 @@ const styles = StyleSheet.create({
   },
   card: {
     marginBottom: 15,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  cardTitle: {
+    flex: 1,
   },
   emptyCard: {
     marginTop: 20,
