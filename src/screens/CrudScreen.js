@@ -224,6 +224,12 @@ export default function CrudScreen({ navigation }) {
           </View>
           <View style={styles.headerButtons}>
             <TouchableOpacity
+              style={[styles.headerActionButton, styles.enderecoButton]}
+              onPress={() => navigation.navigate('Endereco')}
+            >
+              <Text style={styles.headerActionButtonText}>Endereços</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.headerActionButton, styles.syncButton]}
               onPress={handleSync}
               disabled={syncing}
@@ -357,6 +363,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  enderecoButton: {
+    backgroundColor: 'rgba(255, 152, 0, 0.3)',
+    borderColor: 'rgba(255, 152, 0, 0.5)',
   },
   syncButton: {
     backgroundColor: 'rgba(76, 175, 80, 0.3)',

@@ -19,10 +19,28 @@ export const initSQLiteDatabase = () => {
         [],
         () => {
           console.log('Tabela SQLite criada com sucesso');
-          resolve();
         },
         (_, error) => {
           console.error('Erro ao criar tabela SQLite:', error);
+        }
+      );
+      tx.executeSql(
+        `CREATE TABLE IF NOT EXISTS enderecos (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          cep TEXT NOT NULL,
+          rua TEXT NOT NULL,
+          bairro TEXT NOT NULL,
+          numero TEXT NOT NULL,
+          estado TEXT,
+          dataCriacao TEXT
+        );`,
+        [],
+        () => {
+          console.log('Tabela enderecos SQLite criada com sucesso');
+          resolve();
+        },
+        (_, error) => {
+          console.error('Erro ao criar tabela enderecos SQLite:', error);
           reject(error);
         }
       );
@@ -269,17 +287,225 @@ export const syncDatabases = async () => {
       }
     }
 
+    const sqliteEnderecos = await sqliteReadEnderecos();
+    const mongoEnderecos = await mongoReadEnderecos();
+
+    let addedEnderecosToMongo = 0;
+    let addedEnderecosToSQLite = 0;
+
+    const mongoEnderecoMap = new Map();
+    mongoEnderecos.forEach(endereco => {
+      const key = `${endereco.cep}_${endereco.rua}_${endereco.numero}`.toLowerCase();
+      mongoEnderecoMap.set(key, endereco);
+    });
+
+    const sqliteEnderecoMap = new Map();
+    sqliteEnderecos.forEach(endereco => {
+      const key = `${endereco.cep}_${endereco.rua}_${endereco.numero}`.toLowerCase();
+      sqliteEnderecoMap.set(key, endereco);
+    });
+
+    for (const sqliteEndereco of sqliteEnderecos) {
+      const key = `${sqliteEndereco.cep}_${sqliteEndereco.rua}_${sqliteEndereco.numero}`.toLowerCase();
+      if (!mongoEnderecoMap.has(key)) {
+        try {
+          await mongoCreateEndereco({
+            cep: sqliteEndereco.cep,
+            rua: sqliteEndereco.rua,
+            bairro: sqliteEndereco.bairro,
+            numero: sqliteEndereco.numero,
+            estado: sqliteEndereco.estado || ''
+          });
+          addedEnderecosToMongo++;
+        } catch (error) {
+          console.error('Erro ao adicionar endereço no MongoDB:', error);
+        }
+      }
+    }
+
+    for (const mongoEndereco of mongoEnderecos) {
+      const key = `${mongoEndereco.cep}_${mongoEndereco.rua}_${mongoEndereco.numero}`.toLowerCase();
+      if (!sqliteEnderecoMap.has(key)) {
+        try {
+          await sqliteCreateEndereco({
+            cep: mongoEndereco.cep,
+            rua: mongoEndereco.rua,
+            bairro: mongoEndereco.bairro,
+            numero: mongoEndereco.numero,
+            estado: mongoEndereco.estado || ''
+          });
+          addedEnderecosToSQLite++;
+        } catch (error) {
+          console.error('Erro ao adicionar endereço no SQLite:', error);
+        }
+      }
+    }
+
     return {
       success: true,
       addedToMongo,
       addedToSQLite,
-      message: `Sincronização concluída! ${addedToMongo} item(s) adicionado(s) ao MongoDB e ${addedToSQLite} item(s) adicionado(s) ao SQLite.`
+      addedEnderecosToMongo,
+      addedEnderecosToSQLite,
+      message: `Sincronização concluída! ${addedToMongo} item(s) e ${addedEnderecosToMongo} endereço(s) adicionado(s) ao MongoDB. ${addedToSQLite} item(s) e ${addedEnderecosToSQLite} endereço(s) adicionado(s) ao SQLite.`
     };
   } catch (error) {
     return {
       success: false,
       error: error.message
     };
+  }
+};
+
+const mongoCreateEndereco = async (endereco) => {
+  try {
+    const response = await axios.post(`${API_URL}/enderecos`, endereco);
+    return response.data;
+  } catch (error) {
+    throw new Error('Erro ao criar endereço no MongoDB: ' + error.message);
+  }
+};
+
+const mongoReadEnderecos = async () => {
+  try {
+    const response = await axios.get(`${API_URL}/enderecos`);
+    return response.data;
+  } catch (error) {
+    throw new Error('Erro ao ler endereços do MongoDB: ' + error.message);
+  }
+};
+
+const mongoUpdateEndereco = async (id, endereco) => {
+  try {
+    const response = await axios.put(`${API_URL}/enderecos/${id}`, endereco);
+    return response.data;
+  } catch (error) {
+    throw new Error('Erro ao atualizar endereço no MongoDB: ' + error.message);
+  }
+};
+
+const mongoDeleteEndereco = async (id) => {
+  try {
+    const response = await axios.delete(`${API_URL}/enderecos/${id}`);
+    return response.data;
+  } catch (error) {
+    throw new Error('Erro ao deletar endereço do MongoDB: ' + error.message);
+  }
+};
+
+const sqliteCreateEndereco = (endereco) => {
+  return new Promise((resolve, reject) => {
+    db.transaction((tx) => {
+      tx.executeSql(
+        'INSERT INTO enderecos (cep, rua, bairro, numero, estado, dataCriacao) VALUES (?, ?, ?, ?, ?, ?);',
+        [endereco.cep, endereco.rua, endereco.bairro, endereco.numero, endereco.estado || '', new Date().toISOString()],
+        (_, result) => {
+          resolve({ ...endereco, id: result.insertId.toString() });
+        },
+        (_, error) => {
+          reject(error);
+        }
+      );
+    });
+  });
+};
+
+const sqliteReadEnderecos = () => {
+  return new Promise((resolve, reject) => {
+    db.transaction((tx) => {
+      tx.executeSql(
+        'SELECT * FROM enderecos ORDER BY dataCriacao DESC;',
+        [],
+        (_, { rows }) => {
+          const enderecos = [];
+          for (let i = 0; i < rows.length; i++) {
+            enderecos.push({
+              _id: rows.item(i).id.toString(),
+              cep: rows.item(i).cep,
+              rua: rows.item(i).rua,
+              bairro: rows.item(i).bairro,
+              numero: rows.item(i).numero,
+              estado: rows.item(i).estado,
+              dataCriacao: rows.item(i).dataCriacao
+            });
+          }
+          resolve(enderecos);
+        },
+        (_, error) => {
+          reject(error);
+        }
+      );
+    });
+  });
+};
+
+const sqliteUpdateEndereco = (id, endereco) => {
+  return new Promise((resolve, reject) => {
+    db.transaction((tx) => {
+      tx.executeSql(
+        'UPDATE enderecos SET cep = ?, rua = ?, bairro = ?, numero = ?, estado = ? WHERE id = ?;',
+        [endereco.cep, endereco.rua, endereco.bairro, endereco.numero, endereco.estado || '', id],
+        (_, result) => {
+          resolve({ ...endereco, _id: id });
+        },
+        (_, error) => {
+          reject(error);
+        }
+      );
+    });
+  });
+};
+
+const sqliteDeleteEndereco = (id) => {
+  return new Promise((resolve, reject) => {
+    db.transaction((tx) => {
+      tx.executeSql(
+        'DELETE FROM enderecos WHERE id = ?;',
+        [id],
+        (_, result) => {
+          resolve({ message: 'Endereço deletado com sucesso' });
+        },
+        (_, error) => {
+          reject(error);
+        }
+      );
+    });
+  });
+};
+
+export const createEndereco = async (endereco) => {
+  const choice = await getDatabaseChoice();
+  if (choice === 'mongodb') {
+    return await mongoCreateEndereco(endereco);
+  } else {
+    return await sqliteCreateEndereco(endereco);
+  }
+};
+
+export const readEnderecos = async () => {
+  const choice = await getDatabaseChoice();
+  if (choice === 'mongodb') {
+    return await mongoReadEnderecos();
+  } else {
+    return await sqliteReadEnderecos();
+  }
+};
+
+export const updateEndereco = async (id, endereco) => {
+  const choice = await getDatabaseChoice();
+  if (choice === 'mongodb') {
+    return await mongoUpdateEndereco(id, endereco);
+  } else {
+    return await sqliteUpdateEndereco(id, endereco);
+  }
+};
+
+export const deleteEndereco = async (id) => {
+  const choice = await getDatabaseChoice();
+  if (choice === 'mongodb') {
+    return await mongoDeleteEndereco(id);
+  } else {
+    return await sqliteDeleteEndereco(id);
   }
 };
 
