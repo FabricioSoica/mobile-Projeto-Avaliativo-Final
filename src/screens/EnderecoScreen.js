@@ -196,7 +196,16 @@ export default function EnderecoScreen({ navigation }) {
         <StatusBar style="auto" />
         
         <View style={styles.header}>
-          <Title style={styles.headerTitle}>Endereços</Title>
+          <View style={styles.headerContent}>
+            <IconButton
+              icon="arrow-left"
+              iconColor="#fff"
+              size={24}
+              onPress={() => navigation.navigate('Crud')}
+              style={styles.backButton}
+            />
+            <Title style={styles.headerTitle}>Endereços</Title>
+          </View>
         </View>
 
         <ScrollView style={styles.list}>
@@ -341,9 +350,25 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 50,
   },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
   headerTitle: {
     color: '#fff',
     fontSize: 24,
+    flex: 1,
+    textAlign: 'center',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+  },
+  backButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#fff',
+    zIndex: 1,
   },
   list: {
     flex: 1,
